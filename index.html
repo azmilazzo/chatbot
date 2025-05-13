@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local GGUF AI Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/@mlc-ai/web-llm@0.2.30"></script>
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .typing-indicator {
+            display: inline-flex;
+            align-items: flex-end;
+            height: 20px;
+        }
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            margin: 0 2px;
+            background-color: #4b5563;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+        .chat-container {
+            height: calc(100vh - 180px);
+        }
+        .message {
+            max-width: 80%;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <div class="container mx-auto px-4 py-6 max-w-4xl">
+        <header class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-indigo-600">Local AI Chat</h1>
+                <p class="text-gray-500">GGUF models running in your browser</p>
+            </div>
+            <div class="relative group">
+                <button id="settings-btn" class="p-2 rounded-full hover:bg-gray-200 transition">
+                    <i class="fas fa-cog text-gray-600"></i>
+                </button>
+                <div id="settings-menu" class="hidden absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-10 p-4 border border-gray-200">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Model Selection</label>
+                        <select id="model-select" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                            <option value="TinyLlama-1.1B-Chat-v1.0-q4f16_1">TinyLlama 1.1B</option>
+                            <option value="Phi-3-mini-4k-instruct-q4f16_1">Phi-3 Mini 4B</option>
+                            <option value="custom">Custom GGUF</option>
+                        </select>
+                    </div>
+                    <div id="custom-model-group" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Custom Model</label>
+                        <input type="file" id="file-input" accept=".gguf" class="hidden">
+                        <label for="file-input" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50">
+                            <span id="file-name">Select GGUF file</span>
+                        </label>
+                    </div>
+                    <button id="load-model" class="mt-4 w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 transition">Load Model</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="bg-white rounded-xl shadow-md overflow-hidden mb-6">
+            <div id="model-info" class="bg-indigo-50 p-4 border-b border-indigo-100 flex items-center">
+                <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center mr-3">
+                    <i class="fas fa-robot text-indigo-600"></i>
+                </div>
+                <div>
+                    <h3 class="font-medium text-indigo-800">No model loaded</h3>
+                    <p class="text-xs text-indigo-500">Select a model to begin chatting</p>
+                </div>
+                <div id="model-loading" class="ml-auto hidden">
+                    <div class="flex items-center text-sm text-indigo-600">
+                        <div class="typing-indicator mr-2">
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                        </div>
+                        Loading model...
+                    </div>
+                </div>
+            </div>
+
+            <div id="chat-container" class="chat-container overflow-y-auto p-4 space-y-4">
+                <div class="text-center py-10 text-gray-400">
+                    <i class="fas fa-comments text-4xl mb-3"></i>
+                    <p>Load a GGUF model to start chatting</p>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-gray-200 bg-gray-50">
+                <div id="input-container" class="hidden">
+                    <div class="flex space-x-2">
+                        <textarea id="message-input" rows="2" 
+                                  class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none" 
+                                  placeholder="Type your message..."></textarea>
+                        <button id="send-btn" 
+                                class="self-end bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50" 
+                                disabled>
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="select-model-prompt" class="text-center py-4">
+                    <button id="select-model-btn" 
+                            class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition flex items-center mx-auto">
+                        <i class="fas fa-download mr-2"></i> Load GGUF Model
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center text-xs text-gray-400 mt-8">
+            <p>100% local execution - no data leaves your device</p>
+            <p class="mt-1">Powered by WebLLM and GGUF format</p>
+        </div>
+    </div>
+
+    <script>
+        let chat = null;
+        let currentModel = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const elements = {
+                settingsBtn: document.getElementById('settings-btn'),
+                settingsMenu: document.getElementById('settings-menu'),
+                modelSelect: document.getElementById('model-select'),
+                customModelGroup: document.getElementById('custom-model-group'),
+                fileInput: document.getElementById('file-input'),
+                fileName: document.getElementById('file-name'),
+                loadModelBtn: document.getElementById('load-model'),
+                modelInfo: document.getElementById('model-info'),
+                modelLoading: document.getElementById('model-loading'),
+                chatContainer: document.getElementById('chat-container'),
+                inputContainer: document.getElementById('input-container'),
+                selectModelPrompt: document.getElementById('select-model-prompt'),
+                messageInput: document.getElementById('message-input'),
+                sendBtn: document.getElementById('send-btn'),
+            };
+
+            // Initialize WebLLM
+            async function initializeChat() {
+                chat = await webllm.ChatModule.create();
+                chat.setInitProgressCallback((report) => {
+                    console.log(`Loading progress: ${(report.progress * 100).toFixed(1)}%`);
+                });
+            }
+
+            // Model loading handler
+            async function loadSelectedModel() {
+                elements.modelLoading.classList.remove('hidden');
+                try {
+                    const modelId = elements.modelSelect.value;
+                    
+                    if (modelId === 'custom') {
+                        const file = elements.fileInput.files[0];
+                        if (!file) throw new Error('No GGUF file selected');
+                        
+                        await chat.reload(file.name.replace('.gguf', ''), {
+                            model_url: URL.createObjectURL(file),
+                            model_lib_url: '/path/to/webllm.wasm' // Adjust based on your setup
+                        });
+                    } else {
+                        await chat.reload(modelId);
+                    }
+                    
+                    currentModel = modelId;
+                    updateModelInfo();
+                    elements.inputContainer.classList.remove('hidden');
+                    elements.selectModelPrompt.classList.add('hidden');
+                } catch (error) {
+                    alert(`Error loading model: ${error.message}`);
+                } finally {
+                    elements.modelLoading.classList.add('hidden');
+                }
+            }
+
+            function updateModelInfo() {
+                elements.modelInfo.innerHTML = `
+                    <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center mr-3">
+                        <i class="fas fa-robot text-indigo-600"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-indigo-800">${currentModel}</h3>
+                        <p class="text-xs text-indigo-500">Ready for conversation</p>
+                    </div>
+                `;
+            }
+
+            // Event listeners
+            elements.modelSelect.addEventListener('change', () => {
+                elements.customModelGroup.classList.toggle('hidden', 
+                    elements.modelSelect.value !== 'custom');
+            });
+
+            elements.fileInput.addEventListener('change', () => {
+                elements.fileName.textContent = elements.fileInput.files[0]?.name || 'Select GGUF file';
+            });
+
+            elements.loadModelBtn.addEventListener('click', async () => {
+                elements.settingsMenu.classList.add('hidden');
+                await loadSelectedModel();
+            });
+
+            elements.sendBtn.addEventListener('click', async () => {
+                const message = elements.messageInput.value.trim();
+                if (!message) return;
+
+                // Add user message
+                addMessage('user', message);
+                elements.messageInput.value = '';
+                elements.sendBtn.disabled = true;
+
+                // Add typing indicator
+                const typingIndicator = createTypingIndicator();
+                elements.chatContainer.appendChild(typingIndicator);
+                elements.chatContainer.scrollTop = elements.chatContainer.scrollHeight;
+
+                try {
+                    let fullResponse = '';
+                    await chat.generate(message, (_, partialResponse) => {
+                        fullResponse = partialResponse;
+                        typingIndicator.querySelector('p').textContent = fullResponse;
+                        elements.chatContainer.scrollTop = elements.chatContainer.scrollHeight;
+                    }, {streamInterval: 50});
+                } catch (error) {
+                    addMessage('error', `Generation failed: ${error.message}`);
+                } finally {
+                    typingIndicator.remove();
+                }
+            });
+
+            elements.messageInput.addEventListener('input', () => {
+                elements.sendBtn.disabled = elements.messageInput.value.trim() === '';
+            });
+
+            // Helper functions
+            function addMessage(sender, text) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'flex items-start mb-4';
+                
+                if (sender === 'user') {
+                    messageDiv.innerHTML = `
+                        <div class="flex-1"></div>
+                        <div class="message bg-indigo-600 text-white px-4 py-3 rounded-lg rounded-tr-none max-w-xs sm:max-w-md">
+                            <p>${text}</p>
+                        </div>
+                        <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center ml-3 flex-shrink-0">
+                            <i class="fas fa-user text-white text-sm"></i>
+                        </div>
+                    `;
+                } else {
+                    messageDiv.innerHTML = `
+                        <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center mr-3 flex-shrink-0">
+                            <i class="fas fa-robot text-indigo-600 text-sm"></i>
+                        </div>
+                        <div class="message bg-indigo-50 text-gray-800 px-4 py-3 rounded-lg rounded-tl-none">
+                            <p>${text}</p>
+                        </div>
+                    `;
+                }
+                
+                elements.chatContainer.appendChild(messageDiv);
+                elements.chatContainer.scrollTop = elements.chatContainer.scrollHeight;
+            }
+
+            function createTypingIndicator() {
+                const div = document.createElement('div');
+                div.className = 'flex items-start mb-4';
+                div.innerHTML = `
+                    <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center mr-3 flex-shrink-0">
+                        <i class="fas fa-robot text-indigo-600 text-sm"></i>
+                    </div>
+                    <div class="message bg-indigo-50 text-gray-800 px-4 py-3 rounded-lg rounded-tl-none">
+                        <div class="typing-indicator">
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                        </div>
+                    </div>
+                `;
+                return div;
+            }
+
+            // Initialize WebLLM
+            initializeChat().catch(console.error);
+        });
+    </script>
+</body>
+</html>
